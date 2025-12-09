@@ -1,6 +1,9 @@
 faster-whisper
-sounddevice
+pyaudiowpatch
 numpy
 soundfile
 deep-translator
 colorama
+customtkinter
+httpx
+scipy

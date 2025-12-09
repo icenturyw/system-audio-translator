@@ -75,24 +75,48 @@ class App(ctk.CTk):
                 self.lang_option.set(name)
                 break
 
-        # 4. Start/Stop Button
-        self.start_button = ctk.CTkButton(self.sidebar, text="启动监听", command=self.toggle_listening, height=40, font=ctk.CTkFont(weight="bold"))
-        self.start_button.grid(row=7, column=0, padx=20, pady=20, sticky="ew")
+        # 4. API Selection
+        self.api_label = ctk.CTkLabel(self.sidebar, text="翻译服务 (Service):", anchor="w")
+        self.api_label.grid(row=7, column=0, padx=20, pady=(10, 0), sticky="w")
+        
+        self.api_option = ctk.CTkOptionMenu(self.sidebar, values=["Google Translate", "LM Studio"], command=self.on_api_change)
+        self.api_option.grid(row=8, column=0, padx=20, pady=(0, 10), sticky="ew")
+        
+        # LM Studio Settings Frame
+        self.lm_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        self.lm_frame.grid(row=9, column=0, padx=20, pady=(0, 10), sticky="ew")
+        
+        self.lm_url_entry = ctk.CTkEntry(self.lm_frame, placeholder_text="URL (e.g. localhost:1234)")
+        self.lm_url_entry.pack(pady=(0, 5), fill="x")
+        self.lm_url_entry.insert(0, self.config.get("lm_studio_url", "http://localhost:1234"))
+        
+        self.lm_model_entry = ctk.CTkEntry(self.lm_frame, placeholder_text="Model ID (Optional)")
+        self.lm_model_entry.pack(pady=(0, 5), fill="x")
+        self.lm_model_entry.insert(0, self.config.get("lm_studio_model", "local-model"))
 
-        # 5. Always on Top (NEW)
+        # Set API selection from config
+        saved_api = self.config.get("api_type", "Google Translate")
+        self.api_option.set(saved_api)
+        self.on_api_change(saved_api)
+
+        # 5. Start/Stop Button
+        self.start_button = ctk.CTkButton(self.sidebar, text="启动监听", command=self.toggle_listening, height=40, font=ctk.CTkFont(weight="bold"))
+        self.start_button.grid(row=10, column=0, padx=20, pady=20, sticky="ew")
+
+        # 6. Always on Top
         self.top_switch = ctk.CTkSwitch(self.sidebar, text="窗口置顶", command=self.toggle_topmost)
-        self.top_switch.grid(row=9, column=0, padx=20, pady=(0, 10), sticky="w")
+        self.top_switch.grid(row=11, column=0, padx=20, pady=(0, 10), sticky="w")
         if self.config.get("always_on_top", False):
             self.top_switch.select()
             self.attributes('-topmost', True)
 
-        # 6. Mini Mode Button
+        # 7. Mini Mode Button
         self.mini_btn = ctk.CTkButton(self.sidebar, text="进入精简模式 ↗", command=self.enable_mini_mode, fg_color="transparent", border_width=1, text_color=("gray10", "#DCE4EE"))
-        self.mini_btn.grid(row=10, column=0, padx=20, pady=(0, 20), sticky="ew")
+        self.mini_btn.grid(row=12, column=0, padx=20, pady=(0, 20), sticky="ew")
 
         # Status Label
         self.status_label = ctk.CTkLabel(self.sidebar, text="状态: 就绪", text_color="gray", anchor="w")
-        self.status_label.grid(row=11, column=0, padx=20, pady=(0, 20), sticky="w")
+        self.status_label.grid(row=13, column=0, padx=20, pady=(0, 20), sticky="w")
 
         # --- Right Main Area (Subtitles) ---
         self.main_area = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
@@ -128,6 +152,12 @@ class App(ctk.CTk):
 
         # Save config on close
         self.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def on_api_change(self, value):
+        if value == "LM Studio":
+            self.lm_frame.grid()
+        else:
+            self.lm_frame.grid_remove()
 
     def enable_mini_mode(self):
         # 1. Hide non-essential UI
@@ -182,6 +212,11 @@ class App(ctk.CTk):
         self.config["target_lang"] = self.lang_map[self.lang_option.get()]
         self.config["always_on_top"] = bool(self.top_switch.get())
         
+        # New settings
+        self.config["api_type"] = self.api_option.get()
+        self.config["lm_studio_url"] = self.lm_url_entry.get()
+        self.config["lm_studio_model"] = self.lm_model_entry.get()
+        
         try:
             with open(CONFIG_FILE, "w") as f:
                 json.dump(self.config, f)
@@ -204,8 +239,15 @@ class App(ctk.CTk):
             source = "system" if "System" in self.source_option.get() else "mic"
             target_lang = self.lang_map[self.lang_option.get()]
             
+            # API Config
+            api_config = {
+                "type": "lm_studio" if self.api_option.get() == "LM Studio" else "google",
+                "url": self.lm_url_entry.get(),
+                "model": self.lm_model_entry.get()
+            }
+            
             # Init engine in background
-            threading.Thread(target=self.start_engine, args=(model, source, target_lang), daemon=True).start()
+            threading.Thread(target=self.start_engine, args=(model, source, target_lang, api_config), daemon=True).start()
         else:
             # Stop
             self.is_running = False
@@ -221,12 +263,16 @@ class App(ctk.CTk):
         self.model_option.configure(state=state)
         self.source_option.configure(state=state)
         self.lang_option.configure(state=state)
+        self.api_option.configure(state=state)
+        self.lm_url_entry.configure(state=state)
+        self.lm_model_entry.configure(state=state)
 
-    def start_engine(self, model, source, target_lang):
+    def start_engine(self, model, source, target_lang, api_config):
         self.translator = TranslatorEngine(
             model_size=model,
             source_type=source,
             target_lang=target_lang,
+            api_config=api_config,
             on_subtitle=self.update_subtitle,
             on_status=self.update_status
         )
@@ -235,18 +281,24 @@ class App(ctk.CTk):
     def update_status(self, text):
         self.status_label.configure(text=f"状态: {text}")
 
-    def update_subtitle(self, text, is_translation):
-        self.after(0, lambda: self._update_ui(text, is_translation))
+    def update_subtitle(self, text, is_translation, is_final=True):
+        self.after(0, lambda: self._update_ui(text, is_translation, is_final))
 
-    def _update_ui(self, text, is_translation):
+    def _update_ui(self, text, is_translation, is_final):
         if is_translation:
+            # Translation is always final in our current logic
             self.trans_text_label.configure(text=text)
             self.history_box.insert("end", f" {text}\n\n")
             self.history_box.see("end")
         else:
-            self.origin_text_label.configure(text=text)
-            # Add timestamp or just text? Just text for now.
-            self.history_box.insert("end", f"▶ {text}\n")
+            # Original Text
+            if is_final:
+                self.origin_text_label.configure(text=text, text_color="gray")
+                self.history_box.insert("end", f"▶ {text}\n")
+            else:
+                # Intermediate (Streaming)
+                # Show in a lighter color or with "..."
+                self.origin_text_label.configure(text=text + " ...", text_color=("gray60", "gray40"))
 
     def on_close(self):
         self.save_config()

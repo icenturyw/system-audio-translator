@@ -11,16 +11,19 @@
 *   **🎧 系统音频内录 (Windows Loopback)**: 直接捕获电脑发出的声音，无需麦克风中转，非常适合观看生肉视频、Zoom/Teams 会议。
 *   **🎙️ 麦克风监听**: 支持常规的麦克风实时翻译。
 *   **🚀 GPU 加速 (CUDA)**: 集成 `faster-whisper` 和自动 CUDA 环境配置，在 NVIDIA 显卡上实现毫秒级响应。
+*   **🧠 本地 LLM 支持**: 新增 **LM Studio** 支持，可使用本地大模型 (如 Llama 3, Mistral) 进行更高质量的翻译。
 *   **⚡ 智能 VAD 断句**: 针对连续说话场景（如新闻、演讲）设计了动态静音检测和强制切分逻辑，告别无限等待。
 *   **📺 精简模式 (Mini Mode)**: 一键切换到无边框、半透明的悬浮字幕条模式，专为看剧/上网设计，不遮挡主内容。
-*   **🌏 多语言支持**: 自动检测源语言（支持印地语、英语、日语等几乎所有语言），默认翻译为中文（可配置）。
+*   **🌏 多语言支持**: 支持源语言自动检测，**目标语言可在 UI 中实时切换** (中/英/日/韩/德/法/西/俄/印)。
 *   **🎨 现代化 GUI**: 基于 `CustomTkinter` 构建，支持高分屏，美观的深色模式。
 
 ## 🛠️ 技术栈
 
 *   **GUI**: [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter)
 *   **ASR (语音识别)**: [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2)
-*   **Translation**: Google Translate API
+*   **Translation**: 
+    *   Google Translate API (Deep Translator)
+    *   [LM Studio](https://lmstudio.ai/) (Local LLM Server)
 *   **Audio**: `pyaudiowpatch` (支持 WASAPI Loopback) + `scipy` (重采样)
 
 ## 📦 安装指南
@@ -69,7 +72,12 @@ python gui.py
 2.  **输入源**:
     *   `System Audio (系统)`: 录制电脑正在播放的声音。
     *   `Microphone (麦克风)`: 录制你的声音。
-3.  点击 **"启动监听"** 即可开始。
+3.  **目标语言 (Target)**:
+    *   在下拉菜单中选择你希望翻译成的语言（支持中文、英语、日语等）。
+4.  **翻译服务 (Service)**:
+    *   `Google Translate`: 免费、稳定，无需额外配置。
+    *   `LM Studio`: 连接本地运行的 LLM 服务器。需先启动 LM Studio 并开启 Server 模式 (默认端口 1234)。
+5.  点击 **"启动监听"** 即可开始。
 
 > **首次运行提示**: 第一次选择某个模型时，程序会自动从 HuggingFace 下载模型权重，界面可能会短暂显示“加载中”，请耐心等待。
 

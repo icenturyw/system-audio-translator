@@ -54,9 +54,39 @@ import time
 import argparse
 import threading
 from scipy import signal
+import httpx
+
+class LMStudioTranslator:
+    def __init__(self, base_url, model, target_lang="Chinese"):
+        self.base_url = base_url.rstrip('/') + "/v1/chat/completions"
+        self.model = model
+        self.target_lang = target_lang
+        self.client = httpx.Client(timeout=10.0)
+
+    def translate(self, text):
+        try:
+            system_prompt = f"You are a professional translator. Translate the following text into {self.target_lang}. Only return the translated text, no explanations."
+            
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": text}
+                ],
+                "temperature": 0.3,
+                "stream": False
+            }
+            
+            response = self.client.post(self.base_url, json=payload)
+            response.raise_for_status()
+            result = response.json()
+            return result['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            print(f"LM Studio Error: {e}")
+            return f"[Error: {e}]"
 
 class RealTimeTranslator:
-    def __init__(self, model_size="tiny", device="auto", compute_type="int8", source_type="mic", target_lang="zh-CN"):
+    def __init__(self, model_size="tiny", device="auto", compute_type="int8", source_type="mic", target_lang="zh-CN", api_type="google", lm_config=None):
         print(f"{Fore.CYAN}正在初始化模型 ({model_size})... 这可能需要几分钟...{Style.RESET_ALL}")
         
         # 1. 初始化模型
@@ -76,7 +106,18 @@ class RealTimeTranslator:
                  self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
             
             print(f"{Fore.GREEN}使用计算设备: {device}{Style.RESET_ALL}")
-            self.translator = GoogleTranslator(source='auto', target=target_lang)
+            
+            # Initialize Translator
+            if api_type == "lm_studio":
+                print(f"{Fore.CYAN}正在连接 LM Studio ({lm_config['url']})...{Style.RESET_ALL}")
+                self.translator = LMStudioTranslator(
+                    base_url=lm_config.get("url", "http://localhost:1234"),
+                    model=lm_config.get("model", "local-model"),
+                    target_lang=target_lang
+                )
+            else:
+                self.translator = GoogleTranslator(source='auto', target=target_lang)
+                
             print(f"{Fore.GREEN}模型加载完成! (目标语言: {target_lang}){Style.RESET_ALL}")
         except Exception as e:
             print(f"{Fore.RED}模型加载失败: {e}{Style.RESET_ALL}")
@@ -253,6 +294,9 @@ if __name__ == "__main__":
     parser.add_argument("--system", action="store_true", help="监听系统音频 (Loopback)")
     parser.add_argument("--model", default="tiny", help="Whisper 模型大小")
     parser.add_argument("--target", default="zh-CN", help="目标语言代码 (例如: zh-CN, hi, en, ja)")
+    parser.add_argument("--api", default="google", choices=["google", "lm_studio"], help="翻译服务 (google 或 lm_studio)")
+    parser.add_argument("--lm_url", default="http://localhost:1234", help="LM Studio API URL")
+    parser.add_argument("--lm_model", default="local-model", help="LM Studio Model ID")
     
     args = parser.parse_args()
     
@@ -261,9 +305,16 @@ if __name__ == "__main__":
         print(f"{Fore.RED}警告: 未找到 FFmpeg!{Style.RESET_ALL}")
 
     source = "system" if args.system else "mic"
+    lm_config = {"url": args.lm_url, "model": args.lm_model}
     
     try:
-        app = RealTimeTranslator(model_size=args.model, source_type=source, target_lang=args.target)
+        app = RealTimeTranslator(
+            model_size=args.model, 
+            source_type=source, 
+            target_lang=args.target,
+            api_type=args.api,
+            lm_config=lm_config
+        )
         app.process_audio()
     except KeyboardInterrupt:
         print("\n程序已退出。")
