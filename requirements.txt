@@ -1,0 +1,6 @@
+faster-whisper
+sounddevice
+numpy
+soundfile
+deep-translator
+colorama
