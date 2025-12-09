@@ -94,6 +94,10 @@ class App(ctk.CTk):
         self.lm_model_entry.pack(pady=(0, 5), fill="x")
         self.lm_model_entry.insert(0, self.config.get("lm_studio_model", "local-model"))
 
+        self.lm_context_entry = ctk.CTkEntry(self.lm_frame, placeholder_text="Context (e.g. Movie, Medical)")
+        self.lm_context_entry.pack(pady=(0, 5), fill="x")
+        self.lm_context_entry.insert(0, self.config.get("lm_studio_context", ""))
+
         # Set API selection from config
         saved_api = self.config.get("api_type", "Google Translate")
         self.api_option.set(saved_api)
@@ -216,6 +220,7 @@ class App(ctk.CTk):
         self.config["api_type"] = self.api_option.get()
         self.config["lm_studio_url"] = self.lm_url_entry.get()
         self.config["lm_studio_model"] = self.lm_model_entry.get()
+        self.config["lm_studio_context"] = self.lm_context_entry.get()
         
         try:
             with open(CONFIG_FILE, "w") as f:
@@ -243,7 +248,8 @@ class App(ctk.CTk):
             api_config = {
                 "type": "lm_studio" if self.api_option.get() == "LM Studio" else "google",
                 "url": self.lm_url_entry.get(),
-                "model": self.lm_model_entry.get()
+                "model": self.lm_model_entry.get(),
+                "context": self.lm_context_entry.get()
             }
             
             # Init engine in background
@@ -286,10 +292,12 @@ class App(ctk.CTk):
 
     def _update_ui(self, text, is_translation, is_final):
         if is_translation:
-            # Translation is always final in our current logic
             self.trans_text_label.configure(text=text)
-            self.history_box.insert("end", f" {text}\n\n")
-            self.history_box.see("end")
+            
+            # Only add to history if it's the final sentence
+            if is_final:
+                self.history_box.insert("end", f" {text}\n\n")
+                self.history_box.see("end")
         else:
             # Original Text
             if is_final:

@@ -42,15 +42,17 @@ for path in nvidia_paths:
             pass
 
 class LMStudioTranslator:
-    def __init__(self, base_url, model, target_lang="Chinese"):
+    def __init__(self, base_url, model, target_lang="Chinese", context=""):
         self.base_url = base_url.rstrip('/') + "/v1/chat/completions"
         self.model = model
         self.target_lang = target_lang
+        self.context = context
         self.client = httpx.Client(timeout=10.0)
 
     def translate(self, text):
         try:
-            system_prompt = f"You are a professional translator. Translate the following text into {self.target_lang}. Only return the translated text, no explanations."
+            context_instruction = f" Context: {self.context}." if self.context else ""
+            system_prompt = f"You are a professional translator.{context_instruction} Translate the following text into {self.target_lang}. Only return the translated text, no explanations."
             
             payload = {
                 "model": self.model,
@@ -129,7 +131,8 @@ class TranslatorEngine:
                 self.translator = LMStudioTranslator(
                     base_url=self.api_config.get("url", "http://localhost:1234"),
                     model=self.api_config.get("model", "local-model"),
-                    target_lang=self.target_lang
+                    target_lang=self.target_lang,
+                    context=self.api_config.get("context", "")
                 )
             else:
                 self.translator = GoogleTranslator(source='auto', target=self.target_lang)
@@ -152,14 +155,23 @@ class TranslatorEngine:
 
     def stop(self):
         self.running = False
+        # Detach callbacks immediately to prevent UI crashes if thread lingers
+        self.on_subtitle = None
+        self.on_status = None
+        
         if self.thread:
-            self.thread.join(timeout=1)
+            # Give it time to finish current transcription
+            self.thread.join(timeout=12.0)
+            if self.thread.is_alive():
+                print("Warning: Audio thread is still finishing background tasks (safe to ignore).")
             self.thread = None
-        if self.on_status: self.on_status("已停止")
 
     def _audio_callback(self, in_data, frame_count, time_info, status):
-        self.q.put(in_data)
-        return (None, pyaudio.paContinue)
+        if self.running:
+            self.q.put(in_data)
+            return (None, pyaudio.paContinue)
+        else:
+            return (None, pyaudio.paComplete)
 
     def _process_audio_loop(self):
         p = pyaudio.PyAudio()
@@ -223,7 +235,7 @@ class TranslatorEngine:
             
             # Streaming Params
             last_intermediate_time = time.time()
-            INTERMEDIATE_INTERVAL = 0.8 
+            INTERMEDIATE_INTERVAL = 1.5 
 
             # How many 512-chunks per second? ~31.25
             min_silence_chunks = int(MIN_SILENCE_DURATION * (16000 / VAD_WINDOW))
@@ -251,6 +263,8 @@ class TranslatorEngine:
                 
                 # Process in 512-sample chunks
                 while len(vad_accum_buffer) >= VAD_WINDOW:
+                    if not self.running: break # Fast exit
+
                     # Pop 512 samples
                     vad_chunk = np.array(vad_accum_buffer[:VAD_WINDOW], dtype=np.float32)
                     vad_accum_buffer = vad_accum_buffer[VAD_WINDOW:]
@@ -292,6 +306,7 @@ class TranslatorEngine:
                 
                 # 4. Intermediate Transcription (Time-based check outside the VAD loop)
                 if is_speaking:
+                    if not self.running: break # Fast exit
                     current_time = time.time()
                     if current_time - last_intermediate_time > INTERMEDIATE_INTERVAL:
                         # Check buffer length (at least 1s)
@@ -308,14 +323,23 @@ class TranslatorEngine:
                          silence_frames = 0
                          last_intermediate_time = time.time()
             
-            stream.stop_stream()
-            stream.close()
-            p.terminate()
-            
         except Exception as e:
             if self.on_status: self.on_status(f"音频错误: {e}")
             import traceback
             traceback.print_exc()
+        finally:
+            # Safe cleanup
+            try:
+                if stream:
+                    stream.stop_stream()
+                    stream.close()
+            except:
+                pass
+            
+            try:
+                p.terminate()
+            except:
+                pass
 
     def _transcribe(self, buffer, is_final=True):
         if len(buffer) == 0: return
@@ -331,18 +355,27 @@ class TranslatorEngine:
             segments, info = self.model.transcribe(data, beam_size=beam)
             text = " ".join([s.text for s in segments]).strip()
             
+            # Safety check: if stopped during transcription, do not proceed with callbacks
+            if not self.running: return
+
             if text:
-                # Callback to GUI
-                # If it's intermediate, we ONLY show original text, don't translate yet (save API calls)
-                # Or translate if you are rich. Let's translate only on final for speed & cost.
+                # 1. Update Original Text immediately
+                if self.on_subtitle: 
+                    self.on_subtitle(text, is_translation=False, is_final=is_final)
                 
-                if is_final:
-                    if self.on_subtitle: self.on_subtitle(text, is_translation=False, is_final=True)
-                    translated = self.translator.translate(text)
-                    if self.on_subtitle: self.on_subtitle(translated, is_translation=True, is_final=True)
-                else:
-                    # Intermediate: Only update original text view, mark as not final
-                    if self.on_subtitle: self.on_subtitle(text, is_translation=False, is_final=False)
+                # 2. Perform Translation (Async to avoid blocking audio loop)
+                # We do this for BOTH intermediate and final results now
+                threading.Thread(target=self._perform_async_translation, 
+                                 args=(text, is_final), 
+                                 daemon=True).start()
                 
         except Exception as e:
             print(f"Transcribe error: {e}")
+
+    def _perform_async_translation(self, text, is_final):
+        try:
+            translated = self.translator.translate(text)
+            if self.on_subtitle: 
+                self.on_subtitle(translated, is_translation=True, is_final=is_final)
+        except Exception as e:
+            print(f"Translation error: {e}")
