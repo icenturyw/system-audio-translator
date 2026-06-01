@@ -1,6 +1,10 @@
 venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
 .vscode/
 .idea/
 build/
@@ -8,3 +12,6 @@ dist/
 *.spec
 .DS_Store
 settings.json
+.env
+.env.*
+*.log

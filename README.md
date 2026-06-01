@@ -1,103 +1,184 @@
-# 🎙️ AI Real-time Translator (AI 实时同声传译)
+# System Audio Translator
 
-![App Screenshot](example.png)
+Real-time speech recognition and translation for Windows system audio and microphone input.
 
-一个基于 Python 的高性能实时同声传译工具。支持**监听电脑系统声音**（如会议、电影、YouTube）或**麦克风输入**，利用 OpenAI 的 Whisper 模型进行语音识别，并实时翻译成目标语言。
+[![CI](https://github.com/icenturyw/system-audio-translator/actions/workflows/ci.yml/badge.svg)](https://github.com/icenturyw/system-audio-translator/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-本项目拥有现代化的 **Dark Mode GUI**，支持 **NVIDIA GPU 加速**，并针对连续语音进行了断句优化。
+![Application screenshot](example.png)
 
-## ✨ 核心功能
+System Audio Translator captures audio from the current Windows playback device through WASAPI loopback, transcribes it with `faster-whisper`, and translates the recognized speech into a target language. It is designed for meetings, livestreams, videos, courses, and local-first workflows where users want subtitles without routing audio through a microphone.
 
-*   **🎧 系统音频内录 (Windows Loopback)**: 直接捕获电脑发出的声音，无需麦克风中转，非常适合观看生肉视频、Zoom/Teams 会议。
-*   **🎙️ 麦克风监听**: 支持常规的麦克风实时翻译。
-*   **🚀 GPU 加速 (CUDA)**: 集成 `faster-whisper` 和自动 CUDA 环境配置，在 NVIDIA 显卡上实现毫秒级响应。
-*   **🧠 本地 LLM 支持**: 新增 **LM Studio** 支持，可使用本地大模型 (如 Llama 3, Mistral) 进行更高质量的翻译。
-*   **⚡ 流式极速响应**: 引入中间态翻译机制，在说话过程中即可实时预览翻译结果，无需等待整句说完，极大提升观影体验。
-*   **📝 翻译上下文 (Context)**: 支持为本地 LLM (LM Studio) 提供**背景知识**（如“赛博朋克电影”、“医学会议”），让 AI 翻译更懂语境。
-*   **🔊 智能 VAD 断句**: 针对连续说话场景（如新闻、演讲）设计了动态静音检测和强制切分逻辑，告别无限等待。
-*   **📺 精简模式 (Mini Mode)**: 一键切换到无边框、半透明的悬浮字幕条模式，专为看剧/上网设计，不遮挡主内容。
-*   **🌏 多语言支持**: 支持源语言自动检测，**目标语言可在 UI 中实时切换** (中/英/日/韩/德/法/西/俄/印)。
-*   **🎨 现代化 GUI**: 基于 `CustomTkinter` 构建，支持高分屏，美观的深色模式。
+## Why This Project Matters
 
-## 🛠️ 技术栈
+Most real-time translation tools either require paid cloud services, browser-only capture, or microphone-based workarounds. This project focuses on a practical open-source desktop workflow:
 
-*   **GUI**: [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter)
-*   **ASR (语音识别)**: [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2)
-*   **Translation**: 
-    *   Google Translate API (Deep Translator)
-    *   [LM Studio](https://lmstudio.ai/) (Local LLM Server)
-*   **Audio**: `pyaudiowpatch` (支持 WASAPI Loopback) + `scipy` (重采样)
+- Direct system-audio capture on Windows through WASAPI loopback.
+- Local speech recognition with Whisper-compatible models.
+- Optional local LLM translation through LM Studio.
+- A GUI that can be reduced to a compact subtitle overlay.
+- A command-line entry point for debugging and automation.
 
-## 📦 安装指南
+The project is especially useful for developers, students, stream viewers, meeting participants, and multilingual teams who need a hackable translator that can run locally.
 
-### 1. 环境要求
-*   Windows 10/11 (系统内录功能依赖 WASAPI)
-*   Python 3.8+
-*   **FFmpeg** (必须安装)
-*   NVIDIA 显卡 (推荐，用于 GPU 加速)
+## Features
 
-### 2. 安装 FFmpeg
-Whisper 依赖 FFmpeg 处理音频。在 PowerShell 中运行：
+- Windows system-audio capture through `pyaudiowpatch` WASAPI loopback.
+- Microphone capture for live conversations.
+- `faster-whisper` transcription with CPU fallback and CUDA acceleration when available.
+- Google Translate support through `deep-translator`.
+- LM Studio support for local LLM translation.
+- Translation context field for domain-specific prompts, such as movies, medical talks, or technical lectures.
+- Voice activity detection and forced sentence splitting for long continuous speech.
+- Streaming interim subtitles before a sentence is finalized.
+- CustomTkinter dark-mode GUI with always-on-top and mini subtitle mode.
+- PyInstaller build helper for packaging a Windows desktop app.
+
+## Project Status
+
+This is an active early-stage open-source project. The current focus is to make the Windows desktop workflow reliable, document maintenance practices, and add lightweight tests/CI around the parts that do not require live audio hardware.
+
+Roadmap:
+
+- Add automated tests for translator payload construction and configuration handling.
+- Add a provider interface for OpenAI-compatible translation endpoints.
+- Add release artifacts for Windows users.
+- Improve device selection and diagnostics for multi-output audio setups.
+- Add issue triage labels and a reproducible bug-report flow.
+
+For maintainers and reviewers, see [MAINTAINERS.md](MAINTAINERS.md) and [docs/openai-codex-oss-application.md](docs/openai-codex-oss-application.md).
+
+## Requirements
+
+- Windows 10 or Windows 11.
+- Python 3.8 or newer.
+- FFmpeg available on `PATH`.
+- NVIDIA GPU is optional but recommended for lower latency.
+
+Install FFmpeg with Windows Package Manager:
+
 ```powershell
 winget install Gyan.FFmpeg
-# 安装后请重启终端或电脑以生效
 ```
 
-### 3. 克隆与安装依赖
-```powershell
-git clone https://github.com/your-username/translator.git
-cd translator
+Restart the terminal after installation so `ffmpeg` is visible on `PATH`.
 
-# 创建虚拟环境
+## Installation
+
+```powershell
+git clone https://github.com/icenturyw/system-audio-translator.git
+cd system-audio-translator
+
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 
-# 安装依赖 (会自动安装 CUDA 相关的 Python 库)
+python -m pip install --upgrade pip
 pip install -r requirements.txt
-pip install customtkinter pyaudiowpatch faster-whisper deep-translator scipy colorama soundfile numpy
-# 或者直接安装 NVIDIA 库以确保 GPU 可用
+```
+
+For NVIDIA acceleration, install the CUDA runtime wheels used by CTranslate2:
+
+```powershell
 pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
 ```
 
-## 🚀 使用方法
+## Usage
 
-### 启动 GUI
+Start the GUI:
+
 ```powershell
 python gui.py
 ```
 
-### 操作指南
-1.  **模型大小**: 
-    *   `tiny/base`: 速度极快，精度一般。
-    *   `small/medium`: 推荐，速度与精度平衡（截图中使用的是 small）。
-    *   `large-v3`: 精度最高，但需要较好的显卡 (8GB+ VRAM)。
-2.  **输入源**:
-    *   `System Audio (系统)`: 录制电脑正在播放的声音。
-    *   `Microphone (麦克风)`: 录制你的声音。
-3.  **目标语言 (Target)**:
-    *   在下拉菜单中选择你希望翻译成的语言（支持中文、英语、日语等）。
-4.  **翻译服务 (Service)**:
-    *   `Google Translate`: 免费、稳定，无需额外配置。
-    *   `LM Studio`: 连接本地运行的 LLM 服务器。需先启动 LM Studio 并开启 Server 模式 (默认端口 1234)。
-5.  点击 **"启动监听"** 即可开始。
+Start the CLI with microphone input:
 
-> **首次运行提示**: 第一次选择某个模型时，程序会自动从 HuggingFace 下载模型权重，界面可能会短暂显示“加载中”，请耐心等待。
+```powershell
+python main.py --model small --target zh-CN
+```
 
-## ⚙️ 常见问题 (FAQ)
+Start the CLI with system-audio capture:
 
-**Q: 为什么显示 "使用计算设备: cpu"？**
-A: 请确保你安装了 NVIDIA 显卡驱动。本项目内置了自动查找 `nvidia-cudnn` 库的逻辑，通常无需手动配置 CUDA 环境变量。如果依然失败，请检查 `pip list` 是否包含 `nvidia-cudnn-cu12`。
+```powershell
+python main.py --system --model small --target zh-CN
+```
 
-**Q: 翻译有延迟？**
-A: 
-1. 本项目已启用**流式输出**，正常情况下说话过程中会有实时字幕更新。
-2. 确保使用了 GPU 加速（标题栏未显示 CPU）。
-3. 尝试使用更小的模型（如 `small` 代替 `medium`）。
-4. 如果使用的是 LM Studio，本地 LLM 的推理速度可能会成为瓶颈，尝试切换回 Google Translate 对比测试。
+Use LM Studio instead of Google Translate:
 
-**Q: 报错 `[Errno -9997] Invalid sample rate`?**
-A: 本项目已内置自动重采样算法 (`scipy.signal.resample`)，会自动将系统音频（通常 48kHz）转换为 Whisper 需要的 16kHz。如果报错，请确保没有其他程序独占音频设备。
+```powershell
+python main.py --system --api lm_studio --lm_url http://localhost:1234 --lm_model local-model
+```
 
-## 📜 许可证
+## GUI Workflow
 
-MIT License
+1. Choose a Whisper model size. `small` is a good default for quality and speed.
+2. Choose `System Audio` for speaker playback or `Microphone` for direct voice input.
+3. Choose the target language.
+4. Choose `Google Translate` or `LM Studio`.
+5. Click `Start Listening`.
+6. Use mini mode when you want a compact always-on-top subtitle overlay.
+
+## Development
+
+Run a syntax check without needing audio devices or model downloads:
+
+```powershell
+python -m py_compile gui.py main.py translator_core.py build.py check_hostapis.py debug_audio.py
+```
+
+Run the local build helper:
+
+```powershell
+pip install pyinstaller
+python build.py
+```
+
+The packaged app is written to `dist/AI_Translator`.
+
+## Repository Structure
+
+```text
+.
+├── gui.py                 # CustomTkinter desktop UI
+├── main.py                # CLI translator entry point
+├── translator_core.py     # Shared GUI translation engine
+├── build.py               # PyInstaller packaging helper
+├── check_hostapis.py      # Audio host API diagnostics
+├── debug_audio.py         # Audio backend diagnostics
+├── requirements.txt       # Runtime dependencies
+└── example.png            # Screenshot used by the README
+```
+
+## Troubleshooting
+
+If the app runs on CPU, check that your NVIDIA driver is installed and that the CUDA runtime wheels are available:
+
+```powershell
+pip list | findstr nvidia
+```
+
+If FFmpeg is missing, install it and restart the terminal:
+
+```powershell
+winget install Gyan.FFmpeg
+```
+
+If system-audio capture fails, run:
+
+```powershell
+python check_hostapis.py
+python debug_audio.py
+```
+
+If LM Studio translation fails, confirm that the local server is running and exposes an OpenAI-compatible `/v1/chat/completions` endpoint.
+
+## Contributing
+
+Bug reports, device compatibility notes, documentation improvements, and provider integrations are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and contribution guidelines.
+
+## Security
+
+Please report security issues privately. See [SECURITY.md](SECURITY.md).
+
+## License
+
+MIT License. See [LICENSE](LICENSE).

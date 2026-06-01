@@ -1,0 +1,64 @@
+name: Bug report
+description: Report a reproducible problem with audio capture, transcription, translation, or the GUI.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve System Audio Translator. Please avoid sharing private audio, transcripts, or API keys.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Paste the release version or commit hash.
+    validations:
+      required: true
+  - type: dropdown
+    id: input-mode
+    attributes:
+      label: Input mode
+      options:
+        - System Audio
+        - Microphone
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 23H2
+    validations:
+      required: true
+  - type: input
+    id: audio-device
+    attributes:
+      label: Audio device
+      placeholder: Realtek Audio, NVIDIA High Definition Audio, Bluetooth headset, etc.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run python gui.py
+        2. Select System Audio
+        3. Click Start Listening
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Remove private transcripts, tokens, and personal data before posting.
